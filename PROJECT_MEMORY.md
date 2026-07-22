@@ -105,8 +105,27 @@ Skill-stack focus (what we train hardest): **problem decomposition, first-princi
 
 ## 7. Current state
 
-- **Phase:** 2 — ✅ COMPLETE (raw agent loop working & understood)
-- **Next:** Phase 3 — wire in the SigNoz MCP server; replace the fake tool with real SigNoz queries.
+- **Phase:** 3 — ✅ COMPLETE (agent answers from REAL SigNoz data via MCP)
+- **Next:** Phase 4 — multi-agent crew (Triage → Investigator → Reporter) + group a run into ONE trace.
+- **Project named: Argus.** GitHub repo live. Git initialized (branch `main`).
+
+**Phase 3 outcome (done 2026-07-22):**
+- SigNoz API key created; stored in `.env` (git-ignored). Key needed **Admin role** — a role-less key
+  gave 403; fixed by granting admin. Debug lesson: 401 = not authenticated, 403 = authenticated but
+  forbidden (role). Auth header is `SIGNOZ-API-KEY`.
+- SigNoz MCP server running: `docker run -d --rm --name signoz-mcp -p 8000:8000 --env-file .env
+  -e TRANSPORT_MODE=http -e MCP_SERVER_PORT=8000 signoz/signoz-mcp-server:latest`. Endpoint
+  `http://localhost:8000/mcp`. Exposes ~40 `signoz_*` tools.
+- `mcp_probe.py` — lists MCP tools. `argus.py` — the real agent: connects to MCP (streamable HTTP),
+  converts a safe subset of tools to OpenAI schema, runs the Phase-2 loop but executes tools via
+  `session.call_tool()`. Exposes 4 read tools: list_services, get_service_top_operations,
+  aggregate_traces, search_logs.
+- Verified: agent queried live demo telemetry and produced a real health summary. **The recursion is
+  live** — the agent saw a service named `argus` (its own Traceloop telemetry) and reported its own errors.
+- Deps added: `mcp`. Known rough edges (qwen3:8b): rambly answers, occasional tool hallucination,
+  shallow investigation — to improve in Phase 4 with focused roles/prompts.
+- ⚠️ MCP container is `--rm` (disappears on stop) and started manually — Phase 6 should add it to
+  docker-compose/casting for reproducibility.
 
 **Phase 2 outcome (done 2026-07-22):**
 - `agent.py`: hand-written tool-calling loop. One fake tool `get_service_error_rate` + its JSON schema.
