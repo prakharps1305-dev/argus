@@ -1,0 +1,18 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.env
+
+# Editors
+.idea/
+.vscode/
+
+# Foundry generated output (regenerated from casting.yaml)
+pours/
+
+# Cloned external demo app (not our code; clone separately)
+opentelemetry-demo-lite/
+
+# OS
+.DS_Store
