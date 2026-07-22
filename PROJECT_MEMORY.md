@@ -105,9 +105,10 @@ Skill-stack focus (what we train hardest): **problem decomposition, first-princi
 
 ## 7. Current state
 
-- **Phase:** 7 — 🔨 IN PROGRESS — web UI + deployability (mostly done; live end-to-end run not yet
-  re-verified after UI polish).
-- **Next:** run the web UI end-to-end once (confirm streaming + flow diagram animate), then record demo.
+- **Phase:** 7 — ✅ COMPLETE — web UI + deployability, verified running end-to-end.
+- **Build is functionally DONE (all 6 core phases + web UI stretch).**
+- **Remaining before submission:** (1) record a short demo video, (2) submit via the hackathon form
+  when it opens, (3) optional: star SigNoz repo, social post for side-track.
 - **Project named: Argus.** GitHub: github.com/prakharps1305-dev/argus (branch `main`).
 
 **Phase 7 outcome so far (2026-07-22):**
