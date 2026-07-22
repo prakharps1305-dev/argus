@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 from datetime import datetime, timezone
 
 from traceloop.sdk import Traceloop
@@ -9,11 +10,22 @@ from openai import OpenAI
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
-Traceloop.init(app_name="argus", disable_batch=True)
-tracer = trace.get_tracer("argus")          # for our own hand-made spans
+# ---- Config (env-driven so Argus deploys anywhere) ----
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "http://localhost:11434/v1")  # Ollama by default
+LLM_API_KEY = os.getenv("LLM_API_KEY", "ollama")                       # any OpenAI-compatible key
+LLM_MODEL = os.getenv("LLM_MODEL", "qwen3:8b")
+MCP_URL = os.getenv("MCP_URL", "http://localhost:8000/mcp")
+APP_NAME = os.getenv("ARGUS_APP_NAME", "argus")
 
-llm = OpenAI(base_url="http://localhost:11434/v1", api_key="ollama")
-MCP_URL = "http://localhost:8000/mcp"
+Traceloop.init(app_name=APP_NAME, disable_batch=True)
+tracer = trace.get_tracer(APP_NAME)          # for our own hand-made spans
+
+llm = OpenAI(base_url=LLM_BASE_URL, api_key=LLM_API_KEY)
+
+DEFAULT_INCIDENT = (
+    "The checkout experience feels slow. Investigate system health "
+    "and find any services that are unhealthy or erroring."
+)
 
 # Only the Investigator gets these (read-only) SigNoz tools.
 ALLOWED_TOOLS = {
@@ -40,14 +52,14 @@ def mcp_tools_to_openai(mcp_tools):
     return schema
 
 
-async def run_agent(name, system_prompt, user_input, session, tools_schema=None):
+async def run_agent(name, system_prompt, user_input, session, tools_schema=None, emit=None):
     """One agent = one loop. No tools_schema -> pure reasoning (no SigNoz access)."""
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_input},
     ]
     for step in range(6):
-        kwargs = {"model": "qwen3:8b", "messages": messages}
+        kwargs = {"model": LLM_MODEL, "messages": messages}
         if tools_schema:
             kwargs["tools"] = tools_schema
         resp = llm.chat.completions.create(**kwargs)
@@ -73,8 +85,7 @@ async def run_agent(name, system_prompt, user_input, session, tools_schema=None)
             tname = tc.function.name
             args = json.loads(tc.function.arguments or "{}")
             print(f"    [{name} → MCP] {tname}({args})")
-            # Wrap each tool call in its own span so it shows in the trace
-            # and we can measure success/failure.
+            ok = True
             with tracer.start_as_current_span(f"tool.{tname}") as span:
                 span.set_attribute("tool.name", tname)
                 span.set_attribute("tool.args", json.dumps(args)[:500])
@@ -83,19 +94,25 @@ async def run_agent(name, system_prompt, user_input, session, tools_schema=None)
                     text = "\n".join(getattr(c, "text", "") for c in result.content)
                     span.set_attribute("tool.result_chars", len(text))
                     if getattr(result, "isError", False):
+                        ok = False
                         span.set_attribute("tool.error", True)
                         span.set_status(Status(StatusCode.ERROR, "tool returned error"))
                     else:
                         span.set_status(Status(StatusCode.OK))
                 except Exception as e:
+                    ok = False
                     span.set_attribute("tool.error", True)
                     span.set_status(Status(StatusCode.ERROR, str(e)))
                     text = f"ERROR calling {tname}: {e}"
+            if emit:
+                emit("tool", {"agent": name, "tool": tname, "ok": ok})
             messages.append({"role": "tool", "tool_call_id": tc.id, "content": text[:4000]})
     return "(no answer produced)"
 
 
-async def run_crew(incident, session, tools_schema):
+async def run_crew(incident, session, tools_schema, emit=None):
+    """Run the 3-agent crew. Returns {plan, findings, report}. `emit(stage, text)` is
+    an optional callback for live progress."""
     now = datetime.now(timezone.utc).isoformat()
 
     triage_sys = (
@@ -121,28 +138,38 @@ async def run_crew(incident, session, tools_schema):
 
     with tracer.start_as_current_span("argus_crew"):
         with tracer.start_as_current_span("triage"):
-            plan = await run_agent("triage", triage_sys, incident, session)
+            plan = await run_agent("triage", triage_sys, incident, session, emit=emit)
+            if emit:
+                emit("triage", plan)
             print("\n--- TRIAGE PLAN ---\n", plan)
 
         with tracer.start_as_current_span("investigator"):
-            findings = await run_agent("investigator", investigator_sys, plan, session, tools_schema)
+            findings = await run_agent("investigator", investigator_sys, plan, session, tools_schema, emit=emit)
+            if emit:
+                emit("investigator", findings)
             print("\n--- INVESTIGATOR FINDINGS ---\n", findings)
 
         with tracer.start_as_current_span("reporter"):
-            report = await run_agent("reporter", reporter_sys, findings, session)
+            report = await run_agent("reporter", reporter_sys, findings, session, emit=emit)
+            if emit:
+                emit("reporter", report)
             print("\n=== INCIDENT REPORT ===\n", report)
 
+    return {"plan": plan, "findings": findings, "report": report}
 
-async def main():
+
+async def investigate(incident=DEFAULT_INCIDENT, emit=None):
+    """Open an MCP session and run the crew. Importable entrypoint for the web app."""
     async with streamablehttp_client(MCP_URL) as (read, write, _):
         async with ClientSession(read, write) as session:
             await session.initialize()
             tools_schema = mcp_tools_to_openai((await session.list_tools()).tools)
-            incident = (
-                "The checkout experience feels slow. Investigate system health "
-                "and find any services that are unhealthy or erroring."
-            )
-            await run_crew(incident, session, tools_schema)
+            return await run_crew(incident, session, tools_schema, emit=emit)
 
 
-asyncio.run(main())
+async def main():
+    await investigate(DEFAULT_INCIDENT)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

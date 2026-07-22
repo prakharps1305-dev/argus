@@ -1,0 +1,36 @@
+# Argus — deployable bundle: the web app + the SigNoz MCP server.
+#
+# Assumes (reachable from the host):
+#   - SigNoz running (via Foundry: `foundryctl cast -f casting.yaml`)  -> host :8080 (UI/API), :4318 (OTLP)
+#   - an LLM endpoint (default: local Ollama at host :11434, `ollama pull qwen3:8b`)
+#
+# Configure secrets/URLs in .env (see .env.example), then:  docker compose up --build
+
+services:
+  signoz-mcp:
+    image: signoz/signoz-mcp-server:latest
+    environment:
+      TRANSPORT_MODE: http
+      MCP_SERVER_PORT: "8000"
+      SIGNOZ_URL: ${SIGNOZ_URL:-http://host.docker.internal:8080}
+      SIGNOZ_API_KEY: ${SIGNOZ_API_KEY}
+    ports:
+      - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  argus:
+    build: .
+    depends_on:
+      - signoz-mcp
+    environment:
+      MCP_URL: http://signoz-mcp:8000/mcp
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:11434/v1}
+      LLM_API_KEY: ${LLM_API_KEY:-ollama}
+      LLM_MODEL: ${LLM_MODEL:-qwen3:8b}
+      TRACELOOP_BASE_URL: ${TRACELOOP_BASE_URL:-http://host.docker.internal:4318}
+      SIGNOZ_WEB_URL: ${SIGNOZ_WEB_URL:-http://localhost:8080}
+    ports:
+      - "8500:8500"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

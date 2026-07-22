@@ -105,10 +105,30 @@ Skill-stack focus (what we train hardest): **problem decomposition, first-princi
 
 ## 7. Current state
 
-- **Phase:** 5 — ✅ COMPLETE (dashboard + alert over the crew's own telemetry)
-- **Next:** Phase 6 — demo + reproducibility: casting.yaml(.lock) already present, README, record demo,
-  ensure judges can re-run. Consider adding MCP server to compose for reproducibility. Declare AI use.
-- **Project named: Argus.** GitHub repo live. Git branch `main`.
+- **Phase:** 7 — 🔨 IN PROGRESS — web UI + deployability (mostly done; live end-to-end run not yet
+  re-verified after UI polish).
+- **Next:** run the web UI end-to-end once (confirm streaming + flow diagram animate), then record demo.
+- **Project named: Argus.** GitHub: github.com/prakharps1305-dev/argus (branch `main`).
+
+**Phase 7 outcome so far (2026-07-22):**
+- `web.py` — FastAPI + SSE streaming web app. Polished dark UI (👁️ Argus) with a LIVE pipeline
+  flow diagram (Incident→Triage→Investigator⇄SigNoz MCP→Reporter→Report) that lights up per stage
+  and turns RED where a step breaks (empty output or failed tool). Agent detail cards + tool log +
+  "view trace in SigNoz" link. Serves on :8500.
+- `crew.py` refactored: importable `investigate()`, returns {plan,findings,report}, `emit` progress
+  callback (tool events now include ok/error). Config is env-driven: LLM_BASE_URL/LLM_API_KEY/
+  LLM_MODEL (pluggable LLM — Ollama default, or OpenAI/Groq/etc.), MCP_URL, ARGUS_APP_NAME.
+- Deployability: `Dockerfile`, `docker-compose.yml` (argus + signoz-mcp), `.dockerignore`, MIT
+  `LICENSE`, env-driven config, README deploy section. `docker build` VERIFIED OK.
+- Decision: n8n NOT used (black box, can't emit the OTel traces that are the thesis). Built the
+  "where it breaks" flow visualization natively in the web UI instead — better + integrated.
+- ⚠️ Deps: re-froze requirements.txt (now includes fastapi/uvicorn). web.py binds 0.0.0.0 in container.
+
+**Phase 6 outcome (done 2026-07-22):**
+- `requirements.txt` (pip freeze, 105 lines), `.env.example` (template, no secret), `run.sh`
+  (starts demo app + MCP server), README rewritten with architecture + step-by-step reproduce.
+- `.env` stays git-ignored; `.env.example` committed.
+- Still TODO for full polish: record demo video; optionally add MCP+demo to a compose file.
 
 **Phase 5 outcome (done 2026-07-22):**
 - Instrumentation enriched in `crew.py`: each tool call wrapped in a `tool.<name>` span with

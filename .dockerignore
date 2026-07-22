@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+.env
+opentelemetry-demo-lite/
+pours/
+.idea/
+.vscode/
+PROJECT_MEMORY.md
