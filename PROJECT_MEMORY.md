@@ -105,9 +105,25 @@ Skill-stack focus (what we train hardest): **problem decomposition, first-princi
 
 ## 7. Current state
 
-- **Phase:** 3 — ✅ COMPLETE (agent answers from REAL SigNoz data via MCP)
-- **Next:** Phase 4 — multi-agent crew (Triage → Investigator → Reporter) + group a run into ONE trace.
-- **Project named: Argus.** GitHub repo live. Git initialized (branch `main`).
+- **Phase:** 4 — ✅ COMPLETE (multi-agent crew + single nested trace)
+- **Next:** Phase 5 — observability pack: dashboard (tokens/cost/latency per agent, tool success,
+  run duration) + alerts (runaway loop, cost spike, tool failure).
+- **Project named: Argus.** GitHub repo live. Git branch `main`.
+
+**Phase 4 outcome (done 2026-07-22):**
+- `crew.py` — 3-agent crew: Triage (no tools) -> Investigator (SigNoz tools) -> Reporter (no tools).
+  Reusable `run_agent()` (the Phase-2 loop generalized). Chained; each output feeds the next.
+- Grouped into ONE trace via MANUAL OpenTelemetry spans: `with tracer.start_as_current_span(...)`
+  around `argus_crew` > `triage`/`investigator`/`reporter`; auto-instrumented `openai.chat` spans
+  nest inside. Verified as a single nested trace in SigNoz under service `argus`.
+- **Verification lesson (big one):** first run produced a confident but WRONG report — Triage
+  invented fake service names (`checkout-service`, `payment-gateway`) and Investigator trusted them,
+  queried non-existent services, got empty data, concluded "no issues / instrumentation gaps."
+  Fixed by prompting: Triage must NOT invent names; Investigator must call `signoz_list_services`
+  FIRST and use only real names. Second run: grounded, correct (payment 4.97% errors, email 1.97%,
+  checkout/frontend p99 ~30-35s).
+- Known rough edges: the empty-answer nudge can leak into a tool arg; Investigator sometimes stops
+  after list_services instead of deeper digging. Good enough for now; polish later.
 
 **Phase 3 outcome (done 2026-07-22):**
 - SigNoz API key created; stored in `.env` (git-ignored). Key needed **Admin role** — a role-less key
