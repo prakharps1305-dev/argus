@@ -105,10 +105,21 @@ Skill-stack focus (what we train hardest): **problem decomposition, first-princi
 
 ## 7. Current state
 
-- **Phase:** 4 — ✅ COMPLETE (multi-agent crew + single nested trace)
-- **Next:** Phase 5 — observability pack: dashboard (tokens/cost/latency per agent, tool success,
-  run duration) + alerts (runaway loop, cost spike, tool failure).
+- **Phase:** 5 — ✅ COMPLETE (dashboard + alert over the crew's own telemetry)
+- **Next:** Phase 6 — demo + reproducibility: casting.yaml(.lock) already present, README, record demo,
+  ensure judges can re-run. Consider adding MCP server to compose for reproducibility. Declare AI use.
 - **Project named: Argus.** GitHub repo live. Git branch `main`.
+
+**Phase 5 outcome (done 2026-07-22):**
+- Instrumentation enriched in `crew.py`: each tool call wrapped in a `tool.<name>` span with
+  OK/ERROR status (imports `Status, StatusCode`). Tool calls now visible in the trace + measurable.
+- SigNoz dashboard "Argus — Agent Observability": Panel 1 "Agent latency (p99)" = Traces,
+  p99(duration_nano), group by `name`, filter `service.name = 'argus'`. Panel 2 "Total crew runs" =
+  Value, count() of `name = 'argus_crew'`.
+- Alert "Argus crew run too slow": trace-based, p99(duration_nano) of `argus_crew` > 60000000000 ns
+  (60s). Required a notification channel — created throwaway webhook channel `noop`
+  (http://localhost:9999). Status OK; fires when a run exceeds 60s.
+- Query Builder learned: signal=Traces, aggregation p99(duration_nano), group by name, filter service.name.
 
 **Phase 4 outcome (done 2026-07-22):**
 - `crew.py` — 3-agent crew: Triage (no tools) -> Investigator (SigNoz tools) -> Reporter (no tools).

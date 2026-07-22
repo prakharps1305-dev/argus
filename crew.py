@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from traceloop.sdk import Traceloop
 from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
 from openai import OpenAI
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
@@ -72,8 +73,24 @@ async def run_agent(name, system_prompt, user_input, session, tools_schema=None)
             tname = tc.function.name
             args = json.loads(tc.function.arguments or "{}")
             print(f"    [{name} → MCP] {tname}({args})")
-            result = await session.call_tool(tname, args)
-            text = "\n".join(getattr(c, "text", "") for c in result.content)
+            # Wrap each tool call in its own span so it shows in the trace
+            # and we can measure success/failure.
+            with tracer.start_as_current_span(f"tool.{tname}") as span:
+                span.set_attribute("tool.name", tname)
+                span.set_attribute("tool.args", json.dumps(args)[:500])
+                try:
+                    result = await session.call_tool(tname, args)
+                    text = "\n".join(getattr(c, "text", "") for c in result.content)
+                    span.set_attribute("tool.result_chars", len(text))
+                    if getattr(result, "isError", False):
+                        span.set_attribute("tool.error", True)
+                        span.set_status(Status(StatusCode.ERROR, "tool returned error"))
+                    else:
+                        span.set_status(Status(StatusCode.OK))
+                except Exception as e:
+                    span.set_attribute("tool.error", True)
+                    span.set_status(Status(StatusCode.ERROR, str(e)))
+                    text = f"ERROR calling {tname}: {e}"
             messages.append({"role": "tool", "tool_call_id": tc.id, "content": text[:4000]})
     return "(no answer produced)"
 
