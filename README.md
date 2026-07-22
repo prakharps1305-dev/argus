@@ -22,3 +22,4 @@ OpenTelemetry — so the agents are *observed by* SigNoz while they work *throug
 🚧 Work in progress — building during the hackathon (Jul 20–26, 2026).
 
 > AI assistance (Claude) is used in this project and declared per hackathon rules.
+# argus
